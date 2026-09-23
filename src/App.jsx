@@ -9,6 +9,21 @@ const STEPS = [
     options: ["STEM", "Humanities", "Business / Econ", "Arts", "Languages"],
   },
   {
+    key: "hobbies",
+    title: "Which personal interests fuel you outside class?",
+    subtitle: "Hobbies often predict which subjects you'll thrive in.",
+    multi: true,
+    options: [
+      "Reading fiction",
+      "Debate & discussion",
+      "Music / Performance",
+      "Sport & fitness",
+      "Coding / Tech tinkering",
+      "Travel & languages",
+      "Volunteering / Service",
+    ],
+  },
+  {
     key: "strengths",
     title: "Where do you naturally excel?",
     subtitle: "Pick all that apply.",
@@ -18,6 +33,29 @@ const STEPS = [
       "Essay writing",
       "Memorization",
       "Creative design",
+    ],
+  },
+  {
+    key: "style",
+    title: "How do you learn best?",
+    subtitle: "Choose your dominant mode.",
+    multi: false,
+    options: [
+      "Hands-on labs & experiments",
+      "Reading & essay writing",
+      "Discussion & debate",
+      "Visual & creative work",
+    ],
+  },
+  {
+    key: "workload",
+    title: "How rigorous do you want your load?",
+    subtitle: "Balances ambition with wellbeing.",
+    multi: false,
+    options: [
+      "Manageable — protect wellbeing",
+      "Balanced — steady challenge",
+      "Rigorous — maximum stretch",
     ],
   },
   {
@@ -46,6 +84,42 @@ const STEPS = [
     ],
   },
 ];
+
+// Approximate % of candidates scoring a 7, drawn from publicly reported IB
+// Statistical Bulletins (May sessions, recent years). Figures vary session
+// to session; treat as directional guidance, not exam predictions.
+const SUBJECT_STATS = {
+  "Mathematics AA HL": 15,
+  "Mathematics AA SL": 11,
+  "Mathematics AI HL": 10,
+  "Mathematics AI SL": 8,
+  "Physics HL": 12,
+  "Physics SL": 9,
+  "Chemistry HL": 13,
+  "Chemistry SL": 11,
+  "Biology HL": 9,
+  "Biology SL": 7,
+  "Computer Science HL": 15,
+  "Computer Science SL": 12,
+  "English A: Lang & Lit HL": 5,
+  "English A: Lang & Lit SL": 6,
+  "English A: Literature HL": 8,
+  "English A: Literature SL": 7,
+  "History HL": 8,
+  "History SL": 7,
+  "Economics HL": 12,
+  "Economics SL": 12,
+  "Global Politics HL": 11,
+  "Global Politics SL": 12,
+  "Psychology HL": 10,
+  "Psychology SL": 9,
+  "Visual Arts HL": 11,
+  "Visual Arts SL": 8,
+  "Spanish B HL": 18,
+  "Spanish B SL": 14,
+};
+
+const statFor = (name, level) => SUBJECT_STATS[`${name} ${level}`] ?? null;
 
 const PLAN_RULES = {
   "Engineering / CS": {
@@ -81,38 +155,110 @@ const PLAN_RULES = {
 };
 
 function resolve(answers) {
-  const { plan, tier, interests = [], strengths = [] } = answers;
+  const {
+    plan,
+    tier,
+    interests = [],
+    strengths = [],
+    hobbies = [],
+    style,
+    workload,
+  } = answers;
   const base = PLAN_RULES[plan] ?? PLAN_RULES.Undecided;
   let HL = [...base.HL];
   let SL = [...base.SL];
-  let why = base.why;
+  const notes = [base.why];
 
-  if (plan === "Business / Econ" && tier !== "Ultra-competitive (Oxbridge / Ivy)") {
+  if (
+    plan === "Business / Econ" &&
+    tier !== "Ultra-competitive (Oxbridge / Ivy)"
+  ) {
     HL = HL.map((s) => (s === "Mathematics AA" ? "Mathematics AI" : s));
-    why += " Maths AI HL is used here — accepted by most competitive Econ programmes outside Oxbridge/Ivy.";
+    notes.push(
+      "Maths AI HL swapped in for AA — accepted by most competitive Econ programmes outside Oxbridge/Ivy and better matched to applied statistical work."
+    );
   }
 
   if (plan === "Undecided") {
-    if (interests.includes("Arts") || strengths.includes("Creative design")) {
+    if (interests.includes("Arts") || hobbies.includes("Music / Performance")) {
       SL = SL.map((s) => (s === "Biology" ? "Visual Arts" : s));
+      notes.push(
+        "Visual Arts SL added to reflect your creative interests without displacing your HL rigor."
+      );
     }
     if (interests.includes("STEM") && !strengths.includes("Essay writing")) {
       HL = HL.map((s) => (s === "Economics" ? "Physics" : s));
+      notes.push(
+        "Physics HL replaces Economics HL — a stronger STEM signal for admissions when essay writing is not a top strength."
+      );
+    }
+    if (hobbies.includes("Debate & discussion")) {
+      SL = SL.map((s) => (s === "Biology" ? "Global Politics" : s));
     }
   }
 
-  if (tier === "Ultra-competitive (Oxbridge / Ivy)") {
-    why += " Ultra-competitive tier: HL choices prioritise the highest-signal subjects for elite admissions committees.";
+  if (
+    workload === "Manageable — protect wellbeing" &&
+    plan !== "Engineering / CS" &&
+    plan !== "Medicine"
+  ) {
+    HL = HL.map((s) => (s === "Mathematics AA" ? "Mathematics AI" : s));
+    notes.push(
+      "Maths AI selected in place of AA to reduce cognitive load while remaining widely accepted for non-STEM tracks."
+    );
   }
 
-  return { HL, SL, why };
+  if (style === "Visual & creative work" && !HL.includes("Visual Arts")) {
+    if (!SL.includes("Visual Arts")) SL[2] = "Visual Arts";
+  }
+  if (
+    hobbies.includes("Coding / Tech tinkering") &&
+    plan === "Undecided" &&
+    !HL.includes("Computer Science")
+  ) {
+    SL = SL.map((s) => (s === "History" ? "Computer Science" : s));
+  }
+
+  if (tier === "Ultra-competitive (Oxbridge / Ivy)") {
+    notes.push(
+      "Ultra-competitive tier: HL choices prioritise the highest-signal subjects for elite admissions committees."
+    );
+  }
+
+  const decorate = (arr, level) =>
+    arr.map((name) => ({ name, level, stat: statFor(name, level) }));
+  return {
+    HL: decorate(HL, "HL"),
+    SL: decorate(SL, "SL"),
+    notes,
+  };
 }
 
-const GROUPS = ["Group 1 · Language A", "Group 2 · Language B", "Group 3 · Societies", "Group 4 · Sciences", "Group 5 · Maths", "Group 6 · Arts / Elective"];
+const GROUPS = [
+  "Group 1 · Language A",
+  "Group 2 · Language B",
+  "Group 3 · Societies",
+  "Group 4 · Sciences",
+  "Group 5 · Maths",
+  "Group 6 · Arts / Elective",
+];
+
+const statTone = (v) =>
+  v == null
+    ? "text-zinc-300"
+    : v >= 14
+    ? "text-emerald-700 bg-emerald-50 border-emerald-100"
+    : v >= 9
+    ? "text-zinc-700 bg-zinc-100 border-zinc-200"
+    : "text-amber-700 bg-amber-50 border-amber-100";
 
 export default function App() {
   const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState({ interests: [], strengths: [] });
+  const [answers, setAnswers] = useState({
+    interests: [],
+    hobbies: [],
+    strengths: [],
+  });
   const [done, setDone] = useState(false);
 
   const total = STEPS.length;
@@ -136,7 +282,7 @@ export default function App() {
   const next = () => (step + 1 < total ? setStep(step + 1) : setDone(true));
   const back = () => (done ? setDone(false) : setStep(Math.max(0, step - 1)));
   const reset = () => {
-    setAnswers({ interests: [], strengths: [] });
+    setAnswers({ interests: [], hobbies: [], strengths: [] });
     setStep(0);
     setDone(false);
   };
@@ -147,7 +293,13 @@ export default function App() {
     current?.multi ? (selected ?? []).includes(opt) : selected === opt;
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 antialiased" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" }}>
+    <div
+      className="min-h-screen bg-zinc-50 text-zinc-900 antialiased"
+      style={{
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif",
+      }}
+    >
       <div className="fixed top-0 left-0 right-0 h-[2px] bg-zinc-200/60 z-50">
         <div
           className="h-full bg-zinc-900 transition-all duration-500 ease-out"
@@ -164,7 +316,7 @@ export default function App() {
             Find your ideal subject combination.
           </h1>
           <p className="mt-3 text-zinc-500 text-base sm:text-lg leading-relaxed">
-            A four-step pathway to a balanced, university-ready IB Diploma.
+            A seven-step pathway to a balanced, university-ready IB Diploma.
           </p>
         </header>
 
@@ -204,7 +356,15 @@ export default function App() {
                       }`}
                     >
                       {active && (
-                        <svg viewBox="0 0 16 16" className="h-3 w-3 text-zinc-900" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <svg
+                          viewBox="0 0 16 16"
+                          className="h-3 w-3 text-zinc-900"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
                           <path d="M3 8.5l3.5 3.5L13 5" />
                         </svg>
                       )}
@@ -257,11 +417,23 @@ export default function App() {
                     </div>
                     <ul className="space-y-3">
                       {items.map((s, i) => (
-                        <li key={s} className="flex items-start gap-3">
-                          <span className="mt-[2px] text-[11px] text-zinc-400 tabular-nums">
+                        <li key={s.name} className="flex items-start gap-3">
+                          <span className="mt-[3px] text-[11px] text-zinc-400 tabular-nums">
                             0{i + 1}
                           </span>
-                          <span className="text-[15px] text-zinc-900">{s}</span>
+                          <div className="flex-1 flex items-center justify-between gap-3">
+                            <span className="text-[15px] text-zinc-900">
+                              {s.name}
+                            </span>
+                            <span
+                              className={`shrink-0 text-[10px] font-medium tabular-nums px-2 py-[3px] rounded-full border ${statTone(
+                                s.stat
+                              )}`}
+                              title="Approximate % of candidates scoring 7 (IB Statistical Bulletin)"
+                            >
+                              {s.stat != null ? `${s.stat}% 7s` : "— "}
+                            </span>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -272,25 +444,50 @@ export default function App() {
 
             <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8">
               <div className="flex items-center gap-2 mb-3">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-zinc-900" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 text-zinc-900"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M12 2l3 7h7l-5.5 4.5L18 22l-6-4-6 4 1.5-8.5L2 9h7z" />
                 </svg>
                 <h3 className="text-sm font-semibold tracking-wide">
                   University Validation
                 </h3>
               </div>
-              <p className="text-[15px] leading-relaxed text-zinc-600">
-                {result.why}
-              </p>
+              <ul className="space-y-3 text-[15px] leading-relaxed text-zinc-600">
+                {result.notes.map((n, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span className="mt-2 h-[3px] w-[3px] shrink-0 rounded-full bg-zinc-400" />
+                    <span>{n}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-zinc-400">
               {GROUPS.map((g) => (
-                <div key={g} className="px-3 py-2 rounded-lg border border-zinc-200 bg-white/60">
+                <div
+                  key={g}
+                  className="px-3 py-2 rounded-lg border border-zinc-200 bg-white/60"
+                >
                   {g}
                 </div>
               ))}
             </div>
+
+            <p className="mt-6 text-[11px] leading-relaxed text-zinc-400">
+              7-rate figures are approximate historical averages compiled from
+              publicly released IB Statistical Bulletins (recent May sessions).
+              Actual grade distributions vary each session — treat these as
+              directional signals, not exam predictions. See{" "}
+              <span className="underline decoration-zinc-300">ibo.org</span>{" "}
+              for the current bulletin.
+            </p>
 
             <div className="flex items-center justify-between mt-10">
               <button
